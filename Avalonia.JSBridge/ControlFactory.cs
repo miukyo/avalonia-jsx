@@ -282,11 +282,8 @@ public static class ControlFactory
         }
 
         var propInfo = type.GetProperty(propName, BindingFlags.IgnoreCase | BindingFlags.Public | BindingFlags.Instance);
-        // Handle CSS class assignment — JSX uses "class" or "className", Avalonia uses a Classes collection
-        if (instance is Avalonia.Controls.Control ctrl &&
-            (propName.Equals("class", StringComparison.OrdinalIgnoreCase) ||
-             propName.Equals("className", StringComparison.OrdinalIgnoreCase) ||
-             propName.Equals("Classes", StringComparison.OrdinalIgnoreCase)))
+        // Handle Classes specially: it's a get-only collection, not a settable string property
+        if (propInfo != null && propName.Equals("Classes", StringComparison.OrdinalIgnoreCase) && instance is Avalonia.Controls.Control ctrl)
         {
             if (propValue.IsString())
             {

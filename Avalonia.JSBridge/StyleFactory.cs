@@ -30,18 +30,14 @@ public static class StyleFactory
                 var transitions = CreateTransitionsFromList(transList);
                 if (transitions != null)
                 {
-                    // Transitions property is shared — just use the first match
                     var transProp = FindAvaloniaProperty("Transitions");
                     if (transProp != null)
                         style.Setters.Add(new Setter(transProp, transitions));
                 }
                 continue;
             }
-            // Collect ALL unique AvaloniaProperty instances with this name.
-            // Different control types (e.g. Panel vs TemplatedControl) register their own
-            // BackgroundProperty instances; we need a Setter for each so the style applies
-            // regardless of which control type is matched by the selector.
-            foreach (var propInfo in FindAllAvaloniaProperties(propName))
+            var propInfo = FindAvaloniaProperty(propName);
+            if (propInfo != null)
             {
                 var converted = ConvertPropertyValue(propInfo.PropertyType, value, engine);
                 if (converted != null)
@@ -188,19 +184,14 @@ public static class StyleFactory
             result = Selectors.Name(result, name);
         }
 
-
         foreach (var cls in classes)
         {
-            // Avalonia's ClassSelector matches against control.Classes which stores names WITHOUT the dot
-            // e.g. ctrl.Classes.Add("container") → selector must use "container", not ".container"
             var className = cls.TrimStart('.');
             result = Selectors.Class(result, className);
         }
 
         foreach (var pseudo in pseudos)
         {
-            // Pseudo-class names keep their colon prefix (":hover", ":pointerover", etc.)
-            // because Avalonia stores pseudo-states in Classes WITH the colon
             result = Selectors.Class(result, pseudo);
         }
 
@@ -232,10 +223,6 @@ public static class StyleFactory
         typeof(Avalonia.Controls.ItemsControl),
     };
 
-    /// <summary>
-    /// Returns the first AvaloniaProperty with the given name found in the search type list.
-    /// Used for special cases like Transitions where we only need one instance.
-    /// </summary>
     private static AvaloniaProperty? FindAvaloniaProperty(string propName)
     {
         var fieldName = propName + "Property";
@@ -247,29 +234,6 @@ public static class StyleFactory
                 return field.GetValue(null) as AvaloniaProperty;
         }
         return null;
-    }
-
-    /// <summary>
-    /// Returns ALL unique AvaloniaProperty instances named propName across all searched types.
-    /// Different control hierarchies (e.g. Panel.BackgroundProperty vs TemplatedControl.BackgroundProperty)
-    /// register separate property instances; collecting all of them ensures Setters apply to every
-    /// control type that the CSS class selector might match.
-    /// </summary>
-    private static IEnumerable<AvaloniaProperty> FindAllAvaloniaProperties(string propName)
-    {
-        var fieldName = propName + "Property";
-        var seen = new HashSet<AvaloniaProperty>(ReferenceEqualityComparer.Instance);
-        foreach (var type in _propertySearchTypes)
-        {
-            var field = type.GetFields(BindingFlags.Static | BindingFlags.Public | BindingFlags.FlattenHierarchy)
-                .FirstOrDefault(f => f.Name == fieldName && typeof(AvaloniaProperty).IsAssignableFrom(f.FieldType));
-            if (field != null)
-            {
-                var prop = field.GetValue(null) as AvaloniaProperty;
-                if (prop != null && seen.Add(prop))
-                    yield return prop;
-            }
-        }
     }
 
     private static object? ConvertPropertyValue(Type targetType, object? value, Engine? engine)

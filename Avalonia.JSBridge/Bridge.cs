@@ -17,11 +17,11 @@ public class Bridge
     private Engine? _engine;
     private readonly ConcurrentDictionary<string, List<Dictionary<string, object?>>> _globalStyles = new();
     private int _styleIdCounter;
-  
+
     public Bridge()
     {
     }
-  
+
     public Task InitializeAsync()
     {
         _engine = new Engine(engineOptions =>
@@ -107,8 +107,27 @@ public class Bridge
                     if (rules[i].IsObject())
                         ruleList.Add(ControlFactory.JsObjectToDict(rules[i].AsObject()));
                 }
-                // Store rules — they will be applied synchronously once the window is available
                 _globalStyles[id] = ruleList;
+
+                Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                {
+                    var window = Avalonia.Application.Current?.ApplicationLifetime is not null
+                        ? Avalonia.Application.Current?.ApplicationLifetime is Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime lifetime
+                            ? lifetime.MainWindow : null : null;
+                    if (window != null)
+                    {
+                        foreach (var rule in ruleList)
+                        {
+                            var selector = rule.TryGetValue("selector", out var s) ? s?.ToString() : null;
+                            var properties = rule.TryGetValue("properties", out var p) && p is Dictionary<string, object?> pd ? pd : new();
+                            if (!string.IsNullOrEmpty(selector))
+                            {
+                                var style = StyleFactory.CreateStyle(selector, properties, _engine);
+                                window.Styles.Add(style);
+                            }
+                        }
+                    }
+                });
 
                 return id;
             }),
@@ -144,7 +163,7 @@ public class Bridge
     public Task ExecuteBundleAsync(string path)
     {
         if (_engine == null) throw new InvalidOperationException("Bridge engine has not been initialized. Call InitializeAsync first.");
-        
+
         string code;
         if (path.StartsWith("avares://"))
         {
@@ -162,51 +181,11 @@ public class Bridge
                 code = sr.ReadToEnd();
             }
         }
-        
+
         _engine.Execute(code);
         return Task.CompletedTask;
     }
 
-    /// <summary>
-    /// Applies all global styles collected during JS execution to the given window.
-    /// Call this synchronously after InvokeRootComponentAsync so the window is guaranteed
-    /// to be available before styles are attached.
-    /// </summary>
-    public void ApplyGlobalStylesToWindow(Window window)
-    {
-        if (_engine == null) return;
-        
-        // Clear any previously applied JS styles (for hot-reload)
-        window.Styles.Clear();
-        
-        foreach (var (id, ruleList) in _globalStyles)
-        {
-            foreach (var rule in ruleList)
-            {
-                var selector = rule.TryGetValue("selector", out var s) ? s?.ToString() : null;
-                var properties = rule.TryGetValue("properties", out var p) && p is Dictionary<string, object?> pd ? pd : new();
-                
-                if (!string.IsNullOrEmpty(selector))
-                {
-                    try
-                    {
-                        var style = StyleFactory.CreateStyle(selector, properties, _engine);
-                        window.Styles.Add(style);
-                    }
-                    catch (Exception ex)
-                    {
-                        Console.WriteLine($"[Bridge] Failed to create style for selector '{selector}': {ex.Message}");
-                    }
-                }
-            }
-        }
-    }
-    /// <summary>
-    /// Clears all stored global styles. Call before re-executing the bundle on hot-reload
-    /// so styles don't accumulate across reloads.
-    /// </summary>
-    public void ClearGlobalStyles() => _globalStyles.Clear();
- 
     public Task<Control?> InvokeRootComponentAsync(Window? existingWindow = null)
     {
         if (_engine == null) throw new InvalidOperationException("Bridge engine has not been initialized. Call InitializeAsync first.");
@@ -216,14 +195,14 @@ public class Bridge
             Console.WriteLine("Warning: 'AvaloniaBridge' global not found.");
             return Task.FromResult<Control?>(null);
         }
- 
+
         var renderFunction = bridgeObj.AsObject().Get("render");
         if (renderFunction.IsUndefined() || !renderFunction.IsObject())
         {
             Console.WriteLine("Warning: No 'render' function found on AvaloniaBridge.");
             return Task.FromResult<Control?>(null);
         }
- 
+
         var jsResult = _engine.Invoke(renderFunction);
         _engine.Advanced.ProcessTasks();
         ControlFactory.CancelActiveDownloads();
