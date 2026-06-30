@@ -1,0 +1,20 @@
+{
+  "name": "js-frontend",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently --kill-others \"vite build --watch\" \"dotnet run\"",
+    "build": "vite build && dotnet build -c Release --self-contained true",
+    "serve": "vite preview"
+  },
+  "dependencies": {
+    "concurrently": "^10.0.3",
+    "avalonia-jsx": "file:../../../avalonia-jsx",
+    "solid-js": "^1.8.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.0.1",
+    "vite": "^5.0.0",
+    "vite-plugin-solid": "^2.8.0"
+  }
+}

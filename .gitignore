@@ -1,0 +1,9 @@
+bin
+obj
+node_modules
+dist
+.vscode
+package-lock.json
+bun.lock
+# Reference only
+Avalonia
