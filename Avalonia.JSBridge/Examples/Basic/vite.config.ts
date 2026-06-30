@@ -1,9 +1,11 @@
 import { defineConfig } from 'vite';
 import solidPlugin from 'vite-plugin-solid';
 import path from 'path';
+import viteCssStyles from '../../../scripts/vite-css-styles.mjs';
 
 export default defineConfig({
   plugins: [
+    viteCssStyles(),
     solidPlugin({
       solid: {
         generate: 'universal',

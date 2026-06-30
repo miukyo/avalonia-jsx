@@ -35,6 +35,7 @@ public partial class App : Application
             {
                 try
                 {
+                    bridge.ClearGlobalStyles();
                     await bridge.InitializeAsync();
                     await bridge.ExecuteBundleAsync(bundlePath);
                     var root = await bridge.InvokeRootComponentAsync(currentWindow);
@@ -50,6 +51,9 @@ public partial class App : Application
                                 if (currentWindow == window) desktop.Shutdown();
                             };
                         }
+                        // Apply CSS global styles now that the window and its controls exist
+                        bridge.ApplyGlobalStylesToWindow(currentWindow);
+                        window.Show();
                     }
                     else if (root is Control control)
                     {
@@ -62,12 +66,14 @@ public partial class App : Application
                             {
                                 if (currentWindow == hostWindow) desktop.Shutdown();
                             };
+                            bridge.ApplyGlobalStylesToWindow(hostWindow);
                             hostWindow.Show();
                         }
                         else
                         {
                             // Update content in-place
                             currentWindow.Content = control;
+                            bridge.ApplyGlobalStylesToWindow(currentWindow);
                         }
                     }
                 }

@@ -97,7 +97,7 @@ const TYPE_MAP = {
   'FontFeatureCollection': 'JSX.Element | JSX.Element[]',
   'FontFeatureCollection?': 'JSX.Element | JSX.Element[]',
   'ITransition': 'JSX.Element | JSX.Element[]',
-  'Transitions': 'JSX.Element | JSX.Element[]',
+  'Transitions': 'string | object[]',
   'Rect': 'any',
   'Rect?': 'any',
   'Point': 'any',
@@ -108,18 +108,20 @@ const TYPE_MAP = {
   'RelativePoint': 'any',
   'Uri': 'any',
   'Uri?': 'any',
+  'Geometry': 'string',
+  'Geometry?': 'string | undefined',
   'Cursor': 'any',
   'Cursor?': 'any',
   'BoxShadow': 'string',
   'BoxShadows': 'any',
   'IImage': 'any',
   'IImage?': 'any',
-  'IEffect': 'any',
-  'IEffect?': 'any',
+  'IEffect': 'object',
+  'IEffect?': 'object | undefined',
   'ExperimentalAcrylicMaterial': 'any',
   'ExperimentalAcrylicMaterial?': 'any',
-  'ITransform': 'any',
-  'ITransform?': 'any',
+  'ITransform': 'string',
+  'ITransform?': 'string | undefined',
   'FlowDirection': "'LeftToRight' | 'RightToLeft'",
   'HorizontalAlignment': "'Stretch' | 'Left' | 'Center' | 'Right'",
   'VerticalAlignment': "'Stretch' | 'Top' | 'Center' | 'Bottom'",
@@ -180,7 +182,7 @@ const TYPE_MAP = {
   'ThemeVariant?': 'any',
   'ResourceDictionary': 'JSX.Element | JSX.Element[]',
   'IResourceDictionary': 'JSX.Element | JSX.Element[]',
-  'Transitions?': 'JSX.Element | JSX.Element[]',
+  'Transitions?': 'string | object[] | undefined',
   'ColumnDefinitions': 'JSX.Element | JSX.Element[]',
   'RowDefinitions': 'JSX.Element | JSX.Element[]',
   'IReadOnlyList<WindowTransparencyLevel>': 'string | string[] | any',
@@ -643,7 +645,11 @@ const COMPONENT_ORDER = [
 
 // Manual extra props for controls that the parser won't pick up cleanly
 // The set of names we add manually to Control (they don't parse as StyledProperty)
-const EXTRA_PROPS = {};
+const EXTRA_PROPS = {
+  'Control': [
+    { name: 'class', tsType: 'string' },
+  ],
+};
 
 // Property names from base classes that should NOT be re-emitted on every
 // derived class because they're already in ControlProps
@@ -845,6 +851,15 @@ function generate(classMap, baseProps_, baseEvents_) {
       if (emittedProps.has(prop.name)) continue;
       emittedProps.add(prop.name);
       lines.push(`  ${prop.name}?: ${prop.tsType};`);
+    }
+
+    // Inject extra manual props for this class
+    if (EXTRA_PROPS[cls]) {
+      for (const ep of EXTRA_PROPS[cls]) {
+        if (emittedProps.has(ep.name)) continue;
+        emittedProps.add(ep.name);
+        lines.push(`  ${ep.name}?: ${ep.tsType};`);
+      }
     }
 
     // Events from parsed C#

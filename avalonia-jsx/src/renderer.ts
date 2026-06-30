@@ -54,9 +54,11 @@ export const {
     if (name === "props") {
       Object.assign(node.props, value);
     } else {
-      node.props[name] = value;
+      // Map 'class' prop to 'Classes' for Avalonia
+      const propName = name === "class" || name === "className" ? "Classes" : name;
+      node.props[propName] = value;
       if (node.NativeControl && typeof AvaloniaNative !== 'undefined') {
-        AvaloniaNative.updateProperty(node.NativeControl, name, value);
+        AvaloniaNative.updateProperty(node.NativeControl, propName, value);
       }
     }
   },

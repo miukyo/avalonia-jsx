@@ -49,9 +49,9 @@ export interface NativeControl {
   Opacity?: number;
   OpacityMask?: string;
   CacheMode?: any;
-  Effect?: any;
+  Effect?: object | undefined;
   HasMirrorTransform?: boolean;
-  RenderTransform?: any;
+  RenderTransform?: string | undefined;
   RenderTransformOrigin?: any;
   FlowDirection?: 'LeftToRight' | 'RightToLeft';
   VisualParent?: any;
@@ -67,7 +67,7 @@ export interface NativeControl {
   Styles?: any;
   StyleKey?: any;
   ActualThemeVariant?: any;
-  Transitions?: JSX.Element | JSX.Element[];
+  Transitions?: string | object[] | undefined;
   Instance?: any;
   BaseValue?: any;
   Dispatcher?: any;
@@ -1227,9 +1227,9 @@ export interface ControlProps {
   Opacity?: number;
   OpacityMask?: string;
   CacheMode?: any;
-  Effect?: any;
+  Effect?: object | undefined;
   HasMirrorTransform?: boolean;
-  RenderTransform?: any;
+  RenderTransform?: string | undefined;
   RenderTransformOrigin?: any;
   FlowDirection?: 'LeftToRight' | 'RightToLeft';
   VisualParent?: any;
@@ -1306,10 +1306,11 @@ export interface ControlProps {
   ContextFlyout?: any;
   DataTemplates?: any;
   IsLoaded?: boolean;
-  Transitions?: JSX.Element | JSX.Element[];
+  Transitions?: string | object[] | undefined;
   Instance?: any;
   BaseValue?: any;
   Dispatcher?: any;
+  class?: string;
   onRequestBringIntoView?: () => void;
   onLoaded?: () => void;
   onUnloaded?: () => void;
@@ -1513,7 +1514,7 @@ export interface LabelProps extends ContentControlProps {
 }
 
 export interface LayoutTransformControlProps extends DecoratorProps {
-  LayoutTransform?: any;
+  LayoutTransform?: string | undefined;
   UseRenderTransform?: boolean;
   TransformRoot?: any;
 }
@@ -2198,7 +2199,7 @@ export interface TextElementProps {
   Styles?: any;
   StyleKey?: any;
   ActualThemeVariant?: any;
-  Transitions?: JSX.Element | JSX.Element[];
+  Transitions?: string | object[] | undefined;
   Instance?: any;
   BaseValue?: any;
   Dispatcher?: any;
@@ -2287,7 +2288,7 @@ export interface ToggleSwitchProps extends ToggleButtonProps {
   OffContentTemplate?: any;
   OnContent?: any;
   OnContentTemplate?: any;
-  KnobTransitions?: JSX.Element | JSX.Element[];
+  KnobTransitions?: string | object[];
   OffContentPresenter?: any;
   OnContentPresenter?: any;
 }

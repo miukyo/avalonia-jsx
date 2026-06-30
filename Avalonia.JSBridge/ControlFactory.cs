@@ -3,9 +3,13 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using Avalonia.Animation;
 using Avalonia.Controls;
+using Avalonia.Media;
+using Avalonia.Styling;
 using Jint;
 using Jint.Native;
+using Jint.Native.Object;
 
 namespace Avalonia.JSBridge;
 
@@ -181,11 +185,34 @@ public static class ControlFactory
             }
         }
         
-        if (targetType == typeof(string)) return propValue.AsString();
-        if (targetType == typeof(double)) return propValue.AsNumber();
-        if (targetType == typeof(float)) return (float)propValue.AsNumber();
-        if (targetType == typeof(int)) return (int)propValue.AsNumber();
-        if (targetType == typeof(bool)) return propValue.AsBoolean();
+        if (targetType == typeof(string)) return propValue.IsString() ? propValue.AsString() : propValue.ToObject()?.ToString();
+        if (targetType == typeof(double)) return propValue.IsNumber() ? propValue.AsNumber() : 0.0;
+        if (targetType == typeof(float)) return (float)(propValue.IsNumber() ? propValue.AsNumber() : 0.0);
+        if (targetType == typeof(int)) return (int)(propValue.IsNumber() ? propValue.AsNumber() : 0);
+        if (targetType == typeof(bool)) return propValue.IsBoolean() && propValue.AsBoolean();
+        
+        // Handle JSON-to-CLR object conversions for complex types
+        if (propValue.IsObject() && !propValue.IsArray())
+        {
+            var jsObj = propValue.AsObject();
+            var dict = JsObjectToDict(jsObj);
+
+            if (targetType == typeof(ITransform) || typeof(Transform).IsAssignableFrom(targetType))
+                return TransformFactory.CreateFromJson(dict);
+            if (targetType == typeof(IEffect) || typeof(Effect).IsAssignableFrom(targetType))
+                return EffectFactory.CreateFromJson(dict);
+            if (typeof(Brush).IsAssignableFrom(targetType) || targetType == typeof(IBrush))
+                return BrushFactory.CreateFromJson(dict) ?? Brush.Parse("#00000000");
+            if (typeof(Geometry).IsAssignableFrom(targetType) || targetType == typeof(Geometry))
+                return GeometryFactory.CreateFromJson(dict);
+        }
+
+        if (propValue.IsArray())
+        {
+            var arr = propValue.AsArray();
+            if (targetType == typeof(Transitions) || targetType == typeof(IList<ITransition>))
+                return CreateTransitions(arr);
+        }
         
         return propValue.ToObject();
     }
@@ -255,6 +282,20 @@ public static class ControlFactory
         }
 
         var propInfo = type.GetProperty(propName, BindingFlags.IgnoreCase | BindingFlags.Public | BindingFlags.Instance);
+        // Handle CSS class assignment — JSX uses "class" or "className", Avalonia uses a Classes collection
+        if (instance is Avalonia.Controls.Control ctrl &&
+            (propName.Equals("class", StringComparison.OrdinalIgnoreCase) ||
+             propName.Equals("className", StringComparison.OrdinalIgnoreCase) ||
+             propName.Equals("Classes", StringComparison.OrdinalIgnoreCase)))
+        {
+            if (propValue.IsString())
+            {
+                var classStr = propValue.AsString();
+                foreach (var cls in classStr.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+                    ctrl.Classes.Add(cls);
+            }
+            return;
+        }
         if (propInfo != null && propInfo.CanWrite)
         {
             try
@@ -413,6 +454,23 @@ public static class ControlFactory
         if (propInfo != null)
         {
             var val = propInfo.GetValue(instance);
+
+            // If the parent is a TextBlock and children are text nodes,
+            // set the Text property directly instead of adding to Inlines
+            if (instance is Avalonia.Controls.TextBlock textBlock && propInfo.Name == nameof(Avalonia.Controls.TextBlock.Inlines))
+            {
+                var sb = new System.Text.StringBuilder();
+                for (int i = 0; i < len; i++)
+                {
+                    var child = CreateFromJsValue(children.Get((uint)i), engine);
+                    if (child is Avalonia.Controls.TextBlock childTb && childTb.Text != null)
+                        sb.Append(childTb.Text);
+                }
+                if (sb.Length > 0)
+                    textBlock.Text = sb.ToString();
+                return;
+            }
+
             if (val is IList list)
             {
                 for (int i = 0; i < len; i++)
@@ -467,6 +525,15 @@ public static class ControlFactory
         if (propInfo != null)
         {
             var val = propInfo.GetValue(parent);
+
+            // TextBlock children should set Text, not add to Inlines
+            if (parent is Avalonia.Controls.TextBlock tb && propInfo.Name == nameof(Avalonia.Controls.TextBlock.Inlines))
+            {
+                if (childControl is Avalonia.Controls.TextBlock childTb && childTb.Text != null)
+                    tb.Text = childTb.Text;
+                return;
+            }
+
             if (val is IList list)
             {
                 if (anchor != null)
@@ -512,6 +579,10 @@ public static class ControlFactory
 
         if (propInfo != null)
         {
+            // TextBlock children cleanup not applicable — text is stored in Text property
+            if (parent is Avalonia.Controls.TextBlock && propInfo.Name == nameof(Avalonia.Controls.TextBlock.Inlines))
+                return;
+
             var val = propInfo.GetValue(parent);
             if (val is IList list)
             {
@@ -536,5 +607,120 @@ public static class ControlFactory
         if (string.Equals(val, "AcrylicBlur", StringComparison.OrdinalIgnoreCase)) return WindowTransparencyLevel.AcrylicBlur;
         if (string.Equals(val, "Mica", StringComparison.OrdinalIgnoreCase)) return WindowTransparencyLevel.Mica;
         return WindowTransparencyLevel.None;
+    }
+
+    public static Dictionary<string, object?> JsObjectToDict(ObjectInstance jsObj)
+    {
+        var dict = new Dictionary<string, object?>();
+        foreach (var prop in jsObj.GetOwnProperties())
+        {
+            var key = prop.Key.AsString();
+            if (key == "__proto__" || key == "constructor") continue;
+            var val = jsObj.Get(prop.Key);
+            dict[key] = JsValueToClr(val);
+        }
+        return dict;
+    }
+
+    public static object? JsValueToClr(JsValue val)
+    {
+        if (val.IsNull() || val.IsUndefined()) return null;
+        if (val.IsString()) return val.AsString();
+        if (val.IsNumber()) return val.AsNumber();
+        if (val.IsBoolean()) return val.AsBoolean();
+        if (val.IsArray())
+        {
+            var arr = val.AsArray();
+            var list = new List<object?>();
+            for (uint i = 0; i < arr.Length; i++)
+                list.Add(JsValueToClr(arr[i]));
+            return list;
+        }
+        if (val.IsObject())
+        {
+            return JsObjectToDict(val.AsObject());
+        }
+        return val.ToObject();
+    }
+
+    private static Transitions? CreateTransitions(Jint.Native.JsArray arr)
+    {
+        var transitions = new Transitions();
+        for (uint i = 0; i < arr.Length; i++)
+        {
+            var item = arr[i];
+            if (!item.IsObject()) continue;
+            var dict = JsObjectToDict(item.AsObject());
+
+            var propName = dict.TryGetValue("property", out var p) ? p?.ToString() : null;
+            var duration = dict.TryGetValue("duration", out var d) ? Convert.ToDouble(d) : 200.0;
+            var delay = dict.TryGetValue("delay", out var dl) ? Convert.ToDouble(dl) : 0.0;
+            var easingStr = dict.TryGetValue("easing", out var e) ? e?.ToString() : null;
+
+            if (propName == null) continue;
+
+            var avaloniaProp = FindAvaloniaProperty(propName);
+            if (avaloniaProp == null) continue;
+
+            var propType = avaloniaProp.PropertyType;
+            var durationTs = TimeSpan.FromMilliseconds(duration);
+            var delayTs = TimeSpan.FromMilliseconds(delay);
+            var easing = ParseEasingName(easingStr);
+
+            ITransition? transition = null;
+            if (propType == typeof(double) || propType == typeof(float))
+                transition = new DoubleTransition { Property = avaloniaProp, Duration = durationTs, Delay = delayTs, Easing = easing };
+            else if (propType == typeof(int))
+                transition = new IntegerTransition { Property = avaloniaProp, Duration = durationTs, Delay = delayTs, Easing = easing };
+            else if (propType == typeof(bool))
+                transition = new BoolTransition { Property = avaloniaProp, Duration = durationTs, Delay = delayTs, Easing = easing };
+            else if (propType == typeof(Color))
+                transition = new ColorTransition { Property = avaloniaProp, Duration = durationTs, Delay = delayTs, Easing = easing };
+            else if (propType == typeof(IBrush) || propType == typeof(ISolidColorBrush))
+                transition = new BrushTransition { Property = avaloniaProp, Duration = durationTs, Delay = delayTs, Easing = easing };
+            else if (propType == typeof(Thickness))
+                transition = new ThicknessTransition { Property = avaloniaProp, Duration = durationTs, Delay = delayTs, Easing = easing };
+            else if (propType == typeof(CornerRadius))
+                transition = new CornerRadiusTransition { Property = avaloniaProp, Duration = durationTs, Delay = delayTs, Easing = easing };
+            else if (propType == typeof(Point))
+                transition = new PointTransition { Property = avaloniaProp, Duration = durationTs, Delay = delayTs, Easing = easing };
+            else if (propType == typeof(Size))
+                transition = new SizeTransition { Property = avaloniaProp, Duration = durationTs, Delay = delayTs, Easing = easing };
+            else if (propType == typeof(Vector))
+                transition = new VectorTransition { Property = avaloniaProp, Duration = durationTs, Delay = delayTs, Easing = easing };
+            else if (propType == typeof(BoxShadows) || propType == typeof(BoxShadow))
+                transition = new BoxShadowsTransition { Property = avaloniaProp, Duration = durationTs, Delay = delayTs, Easing = easing };
+            else if (propType == typeof(RelativePoint))
+                transition = new RelativePointTransition { Property = avaloniaProp, Duration = durationTs, Delay = delayTs, Easing = easing };
+            else if (propType == typeof(ITransform))
+                transition = new TransformOperationsTransition { Property = avaloniaProp, Duration = durationTs, Delay = delayTs, Easing = easing };
+            else
+                transition = new DoubleTransition { Property = avaloniaProp, Duration = durationTs, Delay = delayTs, Easing = easing };
+
+            if (transition != null)
+                transitions.Add(transition);
+        }
+        return transitions.Count > 0 ? transitions : null;
+    }
+
+    private static AvaloniaProperty? FindAvaloniaProperty(string propName)
+    {
+        return typeof(Control).GetFields(BindingFlags.Static | BindingFlags.Public | BindingFlags.FlattenHierarchy)
+            .FirstOrDefault(f => f.Name == propName + "Property" && typeof(AvaloniaProperty).IsAssignableFrom(f.FieldType))
+            ?.GetValue(null) as AvaloniaProperty;
+    }
+
+    private static Avalonia.Animation.Easings.Easing ParseEasingName(string? name)
+    {
+        if (string.IsNullOrEmpty(name)) return new Avalonia.Animation.Easings.LinearEasing();
+        return name.ToLowerInvariant() switch
+        {
+            "linear" => new Avalonia.Animation.Easings.LinearEasing(),
+            "ease" => new Avalonia.Animation.Easings.CubicEaseInOut(),
+            "ease-in" => new Avalonia.Animation.Easings.CubicEaseIn(),
+            "ease-out" => new Avalonia.Animation.Easings.CubicEaseOut(),
+            "ease-in-out" => new Avalonia.Animation.Easings.CubicEaseInOut(),
+            _ => new Avalonia.Animation.Easings.LinearEasing(),
+        };
     }
 }
