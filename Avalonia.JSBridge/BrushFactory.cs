@@ -52,7 +52,7 @@ public static class BrushFactory
         var brush = new ConicGradientBrush
         {
             Center = ParseRelativePoint(json, "center") ?? new RelativePoint(0.5, 0.5, RelativeUnit.Relative),
-            Angle = GetDouble(json, "angle") ?? 0,
+            Angle = Utils.GetDouble(json, "angle") ?? 0,
         };
         FillGradientStops(brush, json);
         return brush;
@@ -66,8 +66,8 @@ public static class BrushFactory
         foreach (var stop in stops)
         {
             if (stop is not Dictionary<string, object?> stopDict) continue;
-            var offset = GetDouble(stopDict, "offset") ?? 0;
-            var color = ParseColor(stopDict, "color") ?? Colors.Transparent;
+            var offset = Utils.GetDouble(stopDict, "offset") ?? 0;
+            var color = Utils.ParseColor(stopDict, "color") ?? Colors.Transparent;
             brush.GradientStops.Add(new GradientStop(color, offset));
         }
     }
@@ -94,8 +94,8 @@ public static class BrushFactory
             {
                 var parts = s.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
                 if (parts.Length == 2 &&
-                    double.TryParse(parts[0], out var x) &&
-                    double.TryParse(parts[1], out var y))
+                    double.TryParse(parts[0], System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var x) &&
+                    double.TryParse(parts[1], System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var y))
                 {
                     if (x >= 0 && x <= 1 && y >= 0 && y <= 1)
                         return new RelativePoint(x, y, RelativeUnit.Relative);
@@ -118,25 +118,11 @@ public static class BrushFactory
         {
             if (val is double d)
                 return new RelativeScalar(d, d >= 0 && d <= 1 ? RelativeUnit.Relative : RelativeUnit.Absolute);
-            if (val is string s && double.TryParse(s, out var parsed))
+            if (val is string s && double.TryParse(s, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var parsed))
                 return new RelativeScalar(parsed, parsed >= 0 && parsed <= 1 ? RelativeUnit.Relative : RelativeUnit.Absolute);
         }
         return null;
     }
 
-    private static Color? ParseColor(Dictionary<string, object?> dict, string key)
-    {
-        if (dict.TryGetValue(key, out var val) && val is string s && Color.TryParse(s, out var color))
-            return color;
-        return null;
-    }
 
-    private static double? GetDouble(Dictionary<string, object?> dict, string key)
-    {
-        if (dict.TryGetValue(key, out var val) && val is double d) return d;
-        if (dict.TryGetValue(key, out var val2) && val2 is int i) return i;
-        if (dict.TryGetValue(key, out var val3) && val3 is long l) return l;
-        if (dict.TryGetValue(key, out var val4) && val4 is string s && double.TryParse(s, out var parsed)) return parsed;
-        return null;
-    }
 }

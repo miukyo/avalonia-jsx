@@ -131,7 +131,7 @@ function mapCssProperty(cssProp, cssValue) {
   }
 
   if (prop === 'transform') {
-    return { RenderTransform: parseTransform(val) };
+    return { RenderTransform: val };
   }
 
   if (prop === 'transform-origin') {
@@ -335,10 +335,23 @@ function parseTransitions(val) {
     const property = avaloniaProp !== undefined ? avaloniaProp : convertPropertyName(cssProp);
     const item = { property };
 
+    let hasDuration = false;
     for (let i = 1; i < tokens.length; i++) {
-      const t = tokens[i];
-      if (/^\d/.test(t)) {
-        item.duration = parseFloat(t);
+      const t = tokens[i].toLowerCase();
+      if (/^[\d.]/.test(t)) {
+        let val = parseFloat(t);
+        if (t.endsWith('ms')) {
+          // keep as ms
+        } else if (t.endsWith('s')) {
+          val *= 1000;
+        }
+        
+        if (!hasDuration) {
+          item.duration = val;
+          hasDuration = true;
+        } else {
+          item.delay = val;
+        }
       } else {
         item.easing = t;
       }
@@ -606,6 +619,7 @@ function transformStyleJsxElements(ast) {
 /**
  * Vite plugin.
  * Transforms CSS tagged templates and <style> elements at build time.
+ * @returns {import('vite').Plugin}
  */
 export default function viteCssStyles() {
   return {

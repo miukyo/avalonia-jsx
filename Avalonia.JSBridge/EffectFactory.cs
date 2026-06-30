@@ -16,23 +16,23 @@ public static class EffectFactory
         {
             "dropShadow" => new DropShadowEffect
             {
-                BlurRadius = GetDouble(json, "blurRadius") ?? 5,
-                OffsetX = GetDouble(json, "offsetX") ?? 3.5355,
-                OffsetY = GetDouble(json, "offsetY") ?? 3.5355,
-                Color = ParseColor(json, "color") ?? Colors.Black,
-                Opacity = GetDouble(json, "opacity") ?? 1,
+                BlurRadius = Utils.GetDouble(json, "blurRadius") ?? 5,
+                OffsetX = Utils.GetDouble(json, "offsetX") ?? 3.5355,
+                OffsetY = Utils.GetDouble(json, "offsetY") ?? 3.5355,
+                Color = Utils.ParseColor(json, "color") ?? Colors.Black,
+                Opacity = Utils.GetDouble(json, "opacity") ?? 1,
             },
             "dropShadowDirection" => new DropShadowDirectionEffect
             {
-                BlurRadius = GetDouble(json, "blurRadius") ?? 5,
-                ShadowDepth = GetDouble(json, "shadowDepth") ?? 5,
-                Direction = GetDouble(json, "direction") ?? 315,
-                Color = ParseColor(json, "color") ?? Colors.Black,
-                Opacity = GetDouble(json, "opacity") ?? 1,
+                BlurRadius = Utils.GetDouble(json, "blurRadius") ?? 5,
+                ShadowDepth = Utils.GetDouble(json, "shadowDepth") ?? 5,
+                Direction = Utils.GetDouble(json, "direction") ?? 315,
+                Color = Utils.ParseColor(json, "color") ?? Colors.Black,
+                Opacity = Utils.GetDouble(json, "opacity") ?? 1,
             },
             "blur" => new BlurEffect
             {
-                Radius = GetDouble(json, "radius") ?? 5,
+                Radius = Utils.GetDouble(json, "radius") ?? 5,
             },
             _ => null
         };
@@ -50,22 +50,5 @@ public static class EffectFactory
         };
     }
 
-    private static Color? ParseColor(Dictionary<string, object?> json, string key)
-    {
-        if (json.TryGetValue(key, out var val) && val is string s)
-        {
-            if (Color.TryParse(s, out var color))
-                return color;
-        }
-        return null;
-    }
 
-    private static double? GetDouble(Dictionary<string, object?> dict, string key)
-    {
-        if (dict.TryGetValue(key, out var val) && val is double d) return d;
-        if (dict.TryGetValue(key, out var val2) && val2 is int i) return i;
-        if (dict.TryGetValue(key, out var val3) && val3 is long l) return l;
-        if (dict.TryGetValue(key, out var val4) && val4 is string s && double.TryParse(s, out var parsed)) return parsed;
-        return null;
-    }
 }

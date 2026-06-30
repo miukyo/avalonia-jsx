@@ -21,7 +21,7 @@ public static class ControlFactory
     private static readonly System.Net.Http.HttpClient _imageHttpClient = new();
     private static readonly System.Threading.SemaphoreSlim _imageSemaphore = new(16, 16); // Limit to 8 concurrent downloads
     private static System.Threading.CancellationTokenSource _downloadCts = new();
- 
+
     public static void CancelActiveDownloads()
     {
         try
@@ -29,10 +29,10 @@ public static class ControlFactory
             _downloadCts.Cancel();
             _downloadCts.Dispose();
         }
-        catch {}
+        catch { }
         _downloadCts = new System.Threading.CancellationTokenSource();
     }
- 
+
     static ControlFactory()
     {
         var assembly = typeof(Control).Assembly;
@@ -142,6 +142,26 @@ public static class ControlFactory
         {
             if (propValue.IsString()) return Avalonia.Media.Color.Parse(propValue.AsString());
         }
+        if (targetType == typeof(ITransform))
+        {
+            if (propValue.IsString()) return Avalonia.Media.Transformation.TransformOperations.Parse(propValue.AsString());
+        }
+        if (targetType == typeof(BoxShadows))
+        {
+            if (propValue.IsString()) return BoxShadows.Parse(propValue.AsString());
+        }
+        if (targetType == typeof(Point))
+        {
+            if (propValue.IsString()) return Point.Parse(propValue.AsString());
+        }
+        if (targetType == typeof(Size))
+        {
+            if (propValue.IsString()) return Size.Parse(propValue.AsString());
+        }
+        if (targetType == typeof(Vector))
+        {
+            if (propValue.IsString()) return Vector.Parse(propValue.AsString());
+        }
         if (targetType == typeof(IReadOnlyList<WindowTransparencyLevel>) || targetType == typeof(IEnumerable<WindowTransparencyLevel>) || targetType == typeof(IList<WindowTransparencyLevel>))
         {
             if (propValue.IsString())
@@ -172,7 +192,7 @@ public static class ControlFactory
                 return list;
             }
         }
-        
+
         if (targetType.IsEnum)
         {
             if (propValue.IsString())
@@ -184,13 +204,13 @@ public static class ControlFactory
                 return Enum.ToObject(targetType, (int)propValue.AsNumber());
             }
         }
-        
+
         if (targetType == typeof(string)) return propValue.IsString() ? propValue.AsString() : propValue.ToObject()?.ToString();
         if (targetType == typeof(double)) return propValue.IsNumber() ? propValue.AsNumber() : 0.0;
         if (targetType == typeof(float)) return (float)(propValue.IsNumber() ? propValue.AsNumber() : 0.0);
         if (targetType == typeof(int)) return (int)(propValue.IsNumber() ? propValue.AsNumber() : 0);
         if (targetType == typeof(bool)) return propValue.IsBoolean() && propValue.AsBoolean();
-        
+
         // Handle JSON-to-CLR object conversions for complex types
         if (propValue.IsObject() && !propValue.IsArray())
         {
@@ -211,9 +231,13 @@ public static class ControlFactory
         {
             var arr = propValue.AsArray();
             if (targetType == typeof(Transitions) || targetType == typeof(IList<ITransition>))
-                return CreateTransitions(arr);
+            {
+                var list = new List<object?>();
+                for (uint i = 0; i < arr.Length; i++) list.Add(JsValueToClr(arr[i]));
+                return Utils.CreateTransitions(list);
+            }
         }
-        
+
         return propValue.ToObject();
     }
 
@@ -229,10 +253,10 @@ public static class ControlFactory
             {
                 var ownerTypeName = parts[0];
                 var attachedPropName = parts[1];
-                
+
                 var ownerType = typeof(Control).Assembly.GetTypes()
                     .FirstOrDefault(t => t.Name.Equals(ownerTypeName, StringComparison.OrdinalIgnoreCase));
-                
+
                 if (ownerType != null)
                 {
                     var fieldInfo = ownerType.GetField(attachedPropName + "Property", BindingFlags.Static | BindingFlags.Public);
@@ -341,10 +365,10 @@ public static class ControlFactory
                                     var request = new System.Net.Http.HttpRequestMessage(System.Net.Http.HttpMethod.Get, urlOrPath);
                                     var response = await _imageHttpClient.SendAsync(request, token);
                                     response.EnsureSuccessStatusCode();
-                                    
+
                                     var bytes = await response.Content.ReadAsByteArrayAsync(token);
                                     if (token.IsCancellationRequested) return;
-                                    
+
                                     using var ms = new System.IO.MemoryStream(bytes);
                                     var bitmap = new Avalonia.Media.Imaging.Bitmap(ms);
                                     Avalonia.Threading.Dispatcher.UIThread.Post(() =>
@@ -640,84 +664,5 @@ public static class ControlFactory
         return val.ToObject();
     }
 
-    private static Transitions? CreateTransitions(Jint.Native.JsArray arr)
-    {
-        var transitions = new Transitions();
-        for (uint i = 0; i < arr.Length; i++)
-        {
-            var item = arr[i];
-            if (!item.IsObject()) continue;
-            var dict = JsObjectToDict(item.AsObject());
 
-            var propName = dict.TryGetValue("property", out var p) ? p?.ToString() : null;
-            var duration = dict.TryGetValue("duration", out var d) ? Convert.ToDouble(d) : 200.0;
-            var delay = dict.TryGetValue("delay", out var dl) ? Convert.ToDouble(dl) : 0.0;
-            var easingStr = dict.TryGetValue("easing", out var e) ? e?.ToString() : null;
-
-            if (propName == null) continue;
-
-            var avaloniaProp = FindAvaloniaProperty(propName);
-            if (avaloniaProp == null) continue;
-
-            var propType = avaloniaProp.PropertyType;
-            var durationTs = TimeSpan.FromMilliseconds(duration);
-            var delayTs = TimeSpan.FromMilliseconds(delay);
-            var easing = ParseEasingName(easingStr);
-
-            ITransition? transition = null;
-            if (propType == typeof(double) || propType == typeof(float))
-                transition = new DoubleTransition { Property = avaloniaProp, Duration = durationTs, Delay = delayTs, Easing = easing };
-            else if (propType == typeof(int))
-                transition = new IntegerTransition { Property = avaloniaProp, Duration = durationTs, Delay = delayTs, Easing = easing };
-            else if (propType == typeof(bool))
-                transition = new BoolTransition { Property = avaloniaProp, Duration = durationTs, Delay = delayTs, Easing = easing };
-            else if (propType == typeof(Color))
-                transition = new ColorTransition { Property = avaloniaProp, Duration = durationTs, Delay = delayTs, Easing = easing };
-            else if (propType == typeof(IBrush) || propType == typeof(ISolidColorBrush))
-                transition = new BrushTransition { Property = avaloniaProp, Duration = durationTs, Delay = delayTs, Easing = easing };
-            else if (propType == typeof(Thickness))
-                transition = new ThicknessTransition { Property = avaloniaProp, Duration = durationTs, Delay = delayTs, Easing = easing };
-            else if (propType == typeof(CornerRadius))
-                transition = new CornerRadiusTransition { Property = avaloniaProp, Duration = durationTs, Delay = delayTs, Easing = easing };
-            else if (propType == typeof(Point))
-                transition = new PointTransition { Property = avaloniaProp, Duration = durationTs, Delay = delayTs, Easing = easing };
-            else if (propType == typeof(Size))
-                transition = new SizeTransition { Property = avaloniaProp, Duration = durationTs, Delay = delayTs, Easing = easing };
-            else if (propType == typeof(Vector))
-                transition = new VectorTransition { Property = avaloniaProp, Duration = durationTs, Delay = delayTs, Easing = easing };
-            else if (propType == typeof(BoxShadows) || propType == typeof(BoxShadow))
-                transition = new BoxShadowsTransition { Property = avaloniaProp, Duration = durationTs, Delay = delayTs, Easing = easing };
-            else if (propType == typeof(RelativePoint))
-                transition = new RelativePointTransition { Property = avaloniaProp, Duration = durationTs, Delay = delayTs, Easing = easing };
-            else if (propType == typeof(ITransform))
-                transition = new TransformOperationsTransition { Property = avaloniaProp, Duration = durationTs, Delay = delayTs, Easing = easing };
-            else
-                transition = new DoubleTransition { Property = avaloniaProp, Duration = durationTs, Delay = delayTs, Easing = easing };
-
-            if (transition != null)
-                transitions.Add(transition);
-        }
-        return transitions.Count > 0 ? transitions : null;
-    }
-
-    private static AvaloniaProperty? FindAvaloniaProperty(string propName)
-    {
-        return typeof(Control).GetFields(BindingFlags.Static | BindingFlags.Public | BindingFlags.FlattenHierarchy)
-            .FirstOrDefault(f => f.Name == propName + "Property" && typeof(AvaloniaProperty).IsAssignableFrom(f.FieldType))
-            ?.GetValue(null) as AvaloniaProperty;
-    }
-
-    private static Avalonia.Animation.Easings.Easing ParseEasingName(string? name)
-    {
-        if (string.IsNullOrEmpty(name)) return new Avalonia.Animation.Easings.LinearEasing();
-        return name.ToLowerInvariant() switch
-        {
-            "linear" => new Avalonia.Animation.Easings.LinearEasing(),
-            "ease" => new Avalonia.Animation.Easings.CubicEaseInOut(),
-            "ease-in" => new Avalonia.Animation.Easings.CubicEaseIn(),
-            "ease-out" => new Avalonia.Animation.Easings.CubicEaseOut(),
-            "ease-in-out" => new Avalonia.Animation.Easings.CubicEaseInOut(),
-            _ => new Avalonia.Animation.Easings.LinearEasing(),
-        };
-    }
 }

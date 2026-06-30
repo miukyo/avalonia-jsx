@@ -32,7 +32,7 @@ public static class GeometryFactory
     {
         var rect = GetRect(json, "rect");
         if (rect == null) return null;
-        return new RectangleGeometry(rect.Value, GetDouble(json, "radiusX") ?? 0, GetDouble(json, "radiusY") ?? 0);
+        return new RectangleGeometry(rect.Value, Utils.GetDouble(json, "radiusX") ?? 0, Utils.GetDouble(json, "radiusY") ?? 0);
     }
 
     private static EllipseGeometry? CreateEllipse(Dictionary<string, object?> json)
@@ -40,10 +40,10 @@ public static class GeometryFactory
         var rect = GetRect(json, "rect");
         if (rect != null) return new EllipseGeometry(rect.Value);
 
-        var cx = GetDouble(json, "cx") ?? GetDouble(json, "centerX") ?? 0;
-        var cy = GetDouble(json, "cy") ?? GetDouble(json, "centerY") ?? 0;
-        var rx = GetDouble(json, "rx") ?? GetDouble(json, "radiusX") ?? 50;
-        var ry = GetDouble(json, "ry") ?? GetDouble(json, "radiusY") ?? 50;
+        var cx = Utils.GetDouble(json, "cx") ?? Utils.GetDouble(json, "centerX") ?? 0;
+        var cy = Utils.GetDouble(json, "cy") ?? Utils.GetDouble(json, "centerY") ?? 0;
+        var rx = Utils.GetDouble(json, "rx") ?? Utils.GetDouble(json, "radiusX") ?? 50;
+        var ry = Utils.GetDouble(json, "ry") ?? Utils.GetDouble(json, "radiusY") ?? 50;
         return new EllipseGeometry(new Rect(cx - rx, cy - ry, rx * 2, ry * 2));
     }
 
@@ -81,19 +81,10 @@ public static class GeometryFactory
     {
         if (!json.TryGetValue(key, out var val) || val is not Dictionary<string, object?> rect)
             return null;
-        var x = GetDouble(rect, "x") ?? 0;
-        var y = GetDouble(rect, "y") ?? 0;
-        var w = GetDouble(rect, "width") ?? GetDouble(rect, "w") ?? 100;
-        var h = GetDouble(rect, "height") ?? GetDouble(rect, "h") ?? 100;
+        var x = Utils.GetDouble(rect, "x") ?? 0;
+        var y = Utils.GetDouble(rect, "y") ?? 0;
+        var w = Utils.GetDouble(rect, "width") ?? Utils.GetDouble(rect, "w") ?? 100;
+        var h = Utils.GetDouble(rect, "height") ?? Utils.GetDouble(rect, "h") ?? 100;
         return new Rect(x, y, w, h);
-    }
-
-    private static double? GetDouble(Dictionary<string, object?> dict, string key)
-    {
-        if (dict.TryGetValue(key, out var val) && val is double d) return d;
-        if (dict.TryGetValue(key, out var val2) && val2 is int i) return i;
-        if (dict.TryGetValue(key, out var val3) && val3 is long l) return l;
-        if (dict.TryGetValue(key, out var val4) && val4 is string s && double.TryParse(s, out var parsed)) return parsed;
-        return null;
     }
 }

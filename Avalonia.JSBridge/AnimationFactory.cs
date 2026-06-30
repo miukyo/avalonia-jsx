@@ -16,11 +16,11 @@ public static class AnimationFactory
     {
         var anim = new Avalonia.Animation.Animation
         {
-            Duration = TimeSpan.FromMilliseconds(GetDouble(json, "duration") ?? 300),
-            Delay = TimeSpan.FromMilliseconds(GetDouble(json, "delay") ?? 0),
-            DelayBetweenIterations = TimeSpan.FromMilliseconds(GetDouble(json, "delayBetweenIterations") ?? 0),
-            SpeedRatio = GetDouble(json, "speedRatio") ?? 1.0,
-            Easing = ParseEasing(json),
+            Duration = TimeSpan.FromMilliseconds(Utils.GetDouble(json, "duration") ?? 300),
+            Delay = TimeSpan.FromMilliseconds(Utils.GetDouble(json, "delay") ?? 0),
+            DelayBetweenIterations = TimeSpan.FromMilliseconds(Utils.GetDouble(json, "delayBetweenIterations") ?? 0),
+            SpeedRatio = Utils.GetDouble(json, "speedRatio") ?? 1.0,
+            Easing = ParseEasingDict(json),
             IterationCount = ParseIterationCount(json),
             PlaybackDirection = ParsePlaybackDirection(json),
             FillMode = ParseFillMode(json),
@@ -50,7 +50,7 @@ public static class AnimationFactory
     {
         var kf = new KeyFrame
         {
-            Cue = new Cue(GetDouble(json, "offset") ?? 0),
+            Cue = new Cue(Utils.GetDouble(json, "offset") ?? 0),
         };
 
         if (json.TryGetValue("keySpline", out var splineObj) && splineObj is string splineStr)
@@ -61,10 +61,10 @@ public static class AnimationFactory
         {
             kf.KeySpline = new KeySpline
             {
-                ControlPointX1 = GetDouble(splineDict, "x1") ?? 0,
-                ControlPointY1 = GetDouble(splineDict, "y1") ?? 0,
-                ControlPointX2 = GetDouble(splineDict, "x2") ?? 1,
-                ControlPointY2 = GetDouble(splineDict, "y2") ?? 1,
+                ControlPointX1 = Utils.GetDouble(splineDict, "x1") ?? 0,
+                ControlPointY1 = Utils.GetDouble(splineDict, "y1") ?? 0,
+                ControlPointX2 = Utils.GetDouble(splineDict, "x2") ?? 1,
+                ControlPointY2 = Utils.GetDouble(splineDict, "y2") ?? 1,
             };
         }
 
@@ -72,7 +72,7 @@ public static class AnimationFactory
         {
             foreach (var kvp in props)
             {
-                var prop = FindAvaloniaProperty(kvp.Key);
+                var prop = Utils.FindAvaloniaProperty(kvp.Key);
                 if (prop != null)
                 {
                     var converted = ConvertAnimationValue(prop.PropertyType, kvp.Value);
@@ -87,70 +87,12 @@ public static class AnimationFactory
         return kf;
     }
 
-    private static Easing ParseEasing(Dictionary<string, object?> json)
+    private static Easing ParseEasingDict(Dictionary<string, object?> json)
     {
         if (!json.TryGetValue("easing", out var val) || val is not string easingStr)
             return new LinearEasing();
 
-        var parts = easingStr.Split('(', StringSplitOptions.TrimEntries);
-        var name = parts[0].ToLowerInvariant();
-
-        return name switch
-        {
-            "linear" => new LinearEasing(),
-            "ease" => new CubicEaseInOut(),
-            "ease-in" => new CubicEaseIn(),
-            "ease-out" => new CubicEaseOut(),
-            "ease-in-out" => new CubicEaseInOut(),
-            "cubic-bezier" => ParseCubicBezier(easingStr),
-            "spring" => new SpringEasing(),
-            "sine" or "sinein" => new SineEaseIn(),
-            "sineout" => new SineEaseOut(),
-            "sineinout" => new SineEaseInOut(),
-            "quad" or "quadratic" or "quadraticin" => new QuadraticEaseIn(),
-            "quadraticout" => new QuadraticEaseOut(),
-            "quadraticinout" => new QuadraticEaseInOut(),
-            "cubic" or "cubicin" => new CubicEaseIn(),
-            "cubicout" => new CubicEaseOut(),
-            "cubicinout" => new CubicEaseInOut(),
-            "quart" or "quartic" or "quarticin" => new QuarticEaseIn(),
-            "quarticout" => new QuarticEaseOut(),
-            "quarticinout" => new QuarticEaseInOut(),
-            "quint" or "quinticin" => new QuinticEaseIn(),
-            "quinticout" => new QuinticEaseOut(),
-            "quinticinout" => new QuinticEaseInOut(),
-            "expo" or "exponential" or "exponentialin" => new ExponentialEaseIn(),
-            "exponentialout" => new ExponentialEaseOut(),
-            "exponentialinout" => new ExponentialEaseInOut(),
-            "circ" or "circular" or "circularin" => new CircularEaseIn(),
-            "circularout" => new CircularEaseOut(),
-            "circularinout" => new CircularEaseInOut(),
-            "back" or "backin" => new BackEaseIn(),
-            "backout" => new BackEaseOut(),
-            "backinout" => new BackEaseInOut(),
-            "elastic" or "elasticin" => new ElasticEaseIn(),
-            "elasticout" => new ElasticEaseOut(),
-            "elasticinout" => new ElasticEaseInOut(),
-            "bounce" or "bouncein" => new BounceEaseIn(),
-            "bounceout" => new BounceEaseOut(),
-            "bounceinout" => new BounceEaseInOut(),
-            _ => new LinearEasing(),
-        };
-    }
-
-    private static Easing ParseCubicBezier(string str)
-    {
-        var nums = str.Replace("cubic-bezier(", "").Replace(")", "")
-            .Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
-        if (nums.Length == 4 &&
-            double.TryParse(nums[0], out var x1) &&
-            double.TryParse(nums[1], out var y1) &&
-            double.TryParse(nums[2], out var x2) &&
-            double.TryParse(nums[3], out var y2))
-        {
-            return new SplineEasing(x1, y1, x2, y2);
-        }
-        return new LinearEasing();
+        return Utils.ParseEasing(easingStr);
     }
 
     private static IterationCount ParseIterationCount(Dictionary<string, object?> json)
@@ -195,17 +137,6 @@ public static class AnimationFactory
             _ => FillMode.None
         };
     }
-
-    private static AvaloniaProperty? FindAvaloniaProperty(string propName)
-    {
-        var propField = typeof(Avalonia.Controls.Control).GetFields(
-            System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public |
-            System.Reflection.BindingFlags.FlattenHierarchy)
-            .FirstOrDefault(f => f.Name == propName + "Property" &&
-                typeof(AvaloniaProperty).IsAssignableFrom(f.FieldType));
-        return propField?.GetValue(null) as AvaloniaProperty;
-    }
-
     private static object? ConvertAnimationValue(Type targetType, object? value)
     {
         if (value == null) return null;
@@ -248,14 +179,5 @@ public static class AnimationFactory
         }
 
         return value;
-    }
-
-    private static double? GetDouble(Dictionary<string, object?> dict, string key)
-    {
-        if (dict.TryGetValue(key, out var val) && val is double d) return d;
-        if (dict.TryGetValue(key, out var val2) && val2 is int i) return i;
-        if (dict.TryGetValue(key, out var val3) && val3 is long l) return l;
-        if (dict.TryGetValue(key, out var val4) && val4 is string s && double.TryParse(s, out var parsed)) return parsed;
-        return null;
     }
 }

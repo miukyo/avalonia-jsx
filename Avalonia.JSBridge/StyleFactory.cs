@@ -6,7 +6,9 @@ using System.Text.RegularExpressions;
 using Avalonia.Animation;
 using Avalonia.Animation.Easings;
 using Avalonia.Controls;
+using Avalonia.Controls.Presenters;
 using Avalonia.Media;
+using Avalonia.Media.Transformation;
 using Avalonia.Styling;
 using Jint;
 using Jint.Native;
@@ -24,19 +26,18 @@ public static class StyleFactory
         {
             var propName = kvp.Key;
             var value = kvp.Value;
-            // Handle Transitions by name — the raw List<object?> must be converted
             if (propName == "Transitions" && value is List<object?> transList)
             {
-                var transitions = CreateTransitionsFromList(transList);
+                var transitions = Utils.CreateTransitions(transList);
                 if (transitions != null)
                 {
-                    var transProp = FindAvaloniaProperty("Transitions");
+                    var transProp = Utils.FindAvaloniaProperty("Transitions");
                     if (transProp != null)
                         style.Setters.Add(new Setter(transProp, transitions));
                 }
                 continue;
             }
-            var propInfo = FindAvaloniaProperty(propName);
+            var propInfo = Utils.FindAvaloniaProperty(propName);
             if (propInfo != null)
             {
                 var converted = ConvertPropertyValue(propInfo.PropertyType, value, engine);
@@ -192,8 +193,19 @@ public static class StyleFactory
 
         foreach (var pseudo in pseudos)
         {
-            result = Selectors.Class(result, pseudo);
+            var mappedPseudo = pseudo.ToLowerInvariant() switch
+            {
+                ":hover" => ":pointerover",
+                ":active" => ":pressed",
+                _ => pseudo
+            };
+            result = Selectors.Class(result, mappedPseudo);
         }
+
+        // if (pseudos.Count > 0 && result != null)
+        // {
+        //     result = Selectors.Template(result).OfType<ContentPresenter>();
+        // }
 
         return result!;
     }
@@ -205,36 +217,7 @@ public static class StyleFactory
                 && t.IsSubclassOf(typeof(Control)));
     }
 
-    // Types to search for Avalonia properties (covers the full common hierarchy)
-    private static readonly Type[] _propertySearchTypes = new[]
-    {
-        typeof(Control),
-        typeof(Avalonia.Layout.Layoutable),
-        typeof(Avalonia.Visual),
-        typeof(Avalonia.Controls.Primitives.TemplatedControl),
-        typeof(Avalonia.Controls.ContentControl),
-        typeof(Avalonia.Controls.StackPanel),
-        typeof(Avalonia.Controls.WrapPanel),
-        typeof(Avalonia.Controls.Panel),
-        typeof(Avalonia.Controls.Border),
-        typeof(Avalonia.Controls.TextBlock),
-        typeof(Avalonia.Controls.Button),
-        typeof(Avalonia.Controls.TextBox),
-        typeof(Avalonia.Controls.ItemsControl),
-    };
 
-    private static AvaloniaProperty? FindAvaloniaProperty(string propName)
-    {
-        var fieldName = propName + "Property";
-        foreach (var type in _propertySearchTypes)
-        {
-            var field = type.GetFields(BindingFlags.Static | BindingFlags.Public | BindingFlags.FlattenHierarchy)
-                .FirstOrDefault(f => f.Name == fieldName && typeof(AvaloniaProperty).IsAssignableFrom(f.FieldType));
-            if (field != null)
-                return field.GetValue(null) as AvaloniaProperty;
-        }
-        return null;
-    }
 
     private static object? ConvertPropertyValue(Type targetType, object? value, Engine? engine)
     {
@@ -265,6 +248,16 @@ public static class StyleFactory
                     return Thickness.Parse(str);
                 if (targetType == typeof(CornerRadius))
                     return CornerRadius.Parse(str);
+                if (targetType == typeof(ITransform))
+                    return TransformOperations.Parse(str);
+                if (targetType == typeof(BoxShadows))
+                    return BoxShadows.Parse(str);
+                if (targetType == typeof(Point))
+                    return Point.Parse(str);
+                if (targetType == typeof(Size))
+                    return Size.Parse(str);
+                if (targetType == typeof(Vector))
+                    return Vector.Parse(str);
             }
             catch (Exception ex)
             {
@@ -315,71 +308,13 @@ public static class StyleFactory
             if (typeof(System.Collections.IList).IsAssignableFrom(targetType))
                 return list;
             if (targetType == typeof(Transitions) || targetType == typeof(IList<ITransition>))
-                return CreateTransitionsFromList(list);
+                return Utils.CreateTransitions(list);
         }
 
         return value;
     }
 
-    private static Transitions? CreateTransitionsFromList(List<object?> list)
-    {
-        var transitions = new Transitions();
-        foreach (var item in list)
-        {
-            if (item is not Dictionary<string, object?> dict) continue;
-            var propName = dict.TryGetValue("property", out var p) ? p?.ToString() : null;
-            var duration = dict.TryGetValue("duration", out var d) ? Convert.ToDouble(d) : 200.0;
-            var delay = dict.TryGetValue("delay", out var dl) ? Convert.ToDouble(dl) : 0.0;
-            var easingStr = dict.TryGetValue("easing", out var e) ? e?.ToString() : null;
-            if (propName == null) continue;
 
-            var avaloniaProp = FindAvaloniaProperty(propName);
-            if (avaloniaProp == null) continue;
-
-            var propType = avaloniaProp.PropertyType;
-            var durationTs = TimeSpan.FromMilliseconds(duration);
-            var delayTs = TimeSpan.FromMilliseconds(delay);
-            var easing = ParseEasingName(easingStr);
-
-            ITransition? transition = null;
-            if (propType == typeof(double) || propType == typeof(float))
-                transition = new DoubleTransition { Property = avaloniaProp, Duration = durationTs, Delay = delayTs, Easing = easing };
-            else if (propType == typeof(int))
-                transition = new IntegerTransition { Property = avaloniaProp, Duration = durationTs, Delay = delayTs, Easing = easing };
-            else if (propType == typeof(bool))
-                transition = new BoolTransition { Property = avaloniaProp, Duration = durationTs, Delay = delayTs, Easing = easing };
-            else if (propType == typeof(Color))
-                transition = new ColorTransition { Property = avaloniaProp, Duration = durationTs, Delay = delayTs, Easing = easing };
-            else if (propType == typeof(IBrush) || propType == typeof(ISolidColorBrush))
-                transition = new BrushTransition { Property = avaloniaProp, Duration = durationTs, Delay = delayTs, Easing = easing };
-            else if (propType == typeof(Thickness))
-                transition = new ThicknessTransition { Property = avaloniaProp, Duration = durationTs, Delay = delayTs, Easing = easing };
-            else if (propType == typeof(CornerRadius))
-                transition = new CornerRadiusTransition { Property = avaloniaProp, Duration = durationTs, Delay = delayTs, Easing = easing };
-            else if (propType == typeof(ITransform))
-                transition = new TransformOperationsTransition { Property = avaloniaProp, Duration = durationTs, Delay = delayTs, Easing = easing };
-            else
-                transition = new DoubleTransition { Property = avaloniaProp, Duration = durationTs, Delay = delayTs, Easing = easing };
-
-            if (transition != null)
-                transitions.Add(transition);
-        }
-        return transitions.Count > 0 ? transitions : null;
-    }
-
-    private static Easing ParseEasingName(string? name)
-    {
-        if (string.IsNullOrEmpty(name)) return new LinearEasing();
-        return name.ToLowerInvariant() switch
-        {
-            "linear" => new LinearEasing(),
-            "ease" => new CubicEaseInOut(),
-            "ease-in" => new CubicEaseIn(),
-            "ease-out" => new CubicEaseOut(),
-            "ease-in-out" => new CubicEaseInOut(),
-            _ => new LinearEasing(),
-        };
-    }
 
     private enum TokenType { Type, Id, Class, Pseudo, Combinator, AttribStart, AttribEnd, AttribEq, AttribValue }
 
