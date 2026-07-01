@@ -1,8 +1,8 @@
-<center>
+<div align="center">
 
 ![AvaloniaJSX](docs/.img/Banner.png)
 
-</center>
+</div>
 
 # Avalonia JSX
 
